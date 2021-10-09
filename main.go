@@ -3,12 +3,11 @@ package InstagramBackerndAPI
 import (
 	"context"
 	"encoding/json"
-	fmt "fmt"
+	"fmt"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	//"fmt"
 	"httprouter"
 	"log"
 	"net/http"
@@ -30,8 +29,8 @@ type postModel struct {
 }
 
 var (
-	clientOptions = options.Client().ApplyURI("mongodb+srv://user:<password>@users.thoxw.mongodb.net/myFirstDatabase?retryWrites=true&w=majority")
-	ctx, _        = context.WithTimeout(context.Background(), 10*time.Second)
+	clientOptions = options.Client().ApplyURI("mongodb+srv://user:1234@users.thoxw.mongodb.net/Users?retryWrites=true&w=majority")
+	ctx, cancel   = context.WithTimeout(context.Background(), 10*time.Second)
 	client, _     = mongo.Connect(ctx, clientOptions)
 )
 
@@ -42,7 +41,7 @@ func addUser(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 
 	user.id = primitive.NewObjectID()
 
-	client.Database("Users").Collection("UserList").InsertOne(ctx, bson.M{})
+	client.Database("Users").Collection("UserList").InsertOne(context.TODO(), user)
 }
 
 func getUser(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
@@ -71,7 +70,7 @@ func addPost(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 
 	post.id = primitive.NewObjectID()
 
-	client.Database("Users").Collection(uid).InsertOne(ctx, bson.M{})
+	client.Database("Users").Collection(uid).InsertOne(context.TODO(), post)
 }
 
 func getPost(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
@@ -113,11 +112,13 @@ func getAllPost(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 		}
 		pj, _ := json.Marshal(post)
 		fmt.Fprint(w, "%s\n", pj)
-		time.Sleep(2 * time.Second)
+		time.Sleep(2 * time.Second) // Posts will show 2 Seconds after earlier one => PAGINATION
 	}
 }
 
 func main() {
+	defer cancel()
+
 	router := httprouter.New()
 	router.POST("/user/:id", addUser)
 	router.GET("/user/:id", getUser)
@@ -126,5 +127,4 @@ func main() {
 	router.GET("/user/post/:uid", getAllPost)
 
 	log.Fatal(http.ListenAndServe(":8080", router))
-
 }
