@@ -3,12 +3,14 @@ package InstagramBackerndAPI
 import (
 	"context"
 	"encoding/json"
-	"httprouter-master/httprouter-master"
+	fmt "fmt"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	//"fmt"
+	"httprouter"
 	"log"
-	"mongo-go-driver-master/mongo-go-driver-master/bson"
-	"mongo-go-driver-master/mongo-go-driver-master/bson/primitive"
-	"mongo-go-driver-master/mongo-go-driver-master/mongo"
-	"mongo-go-driver-master/mongo-go-driver-master/mongo/options"
 	"net/http"
 	"time"
 )
@@ -21,10 +23,10 @@ type userModel struct {
 }
 
 type postModel struct {
-	id        primitive.ObjectID `json:"id"                  bson:"_id"`
-	caption   string             `json:"caption,omitempty"   bson:"caption"`
-	imageurl  string             `json:"imageurl,omitempty"  bson:"imageurl"`
-	timestamp string             `json:"timestamp,omitempty" bson:"timestamp"`
+	id        primitive.ObjectID  `json:"id"                  bson:"_id"`
+	caption   string              `json:"caption,omitempty"   bson:"caption"`
+	imageurl  string              `json:"imageurl,omitempty"  bson:"imageurl"`
+	timestamp primitive.Timestamp `json:"timestamp,omitempty" bson:"timestamp"`
 }
 
 var (
@@ -33,36 +35,95 @@ var (
 	client, _     = mongo.Connect(ctx, clientOptions)
 )
 
-func addUser(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	id := ps.ByName("id")
-	if !bson.TypeObjectID(id) {
-		w.WriteHeader(http.StatusNotFound)
-	}
+func addUser(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	user := userModel{}
+
+	json.NewDecoder(r.Body).Decode(&user)
+
+	user.id = primitive.NewObjectID()
+
+	client.Database("Users").Collection("UserList").InsertOne(ctx, bson.M{})
 }
 
 func getUser(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	id := ps.ByName("id")
+	uid := ps.ByName("uid")
+
+	if !primitive.IsValidObjectID(uid) {
+		w.WriteHeader(http.StatusNotFound)
+	}
+
+	filterCursor, err := client.Database("Users").Collection("UserList").Find(ctx, bson.M{"_id": uid})
+	if err != nil {
+		log.Fatal(err)
+	}
+	var user bson.M
+	if err = filterCursor.All(ctx, &user); err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(user)
 }
 
 func addPost(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	id := ps.ByName("id")
+	uid := ps.ByName("uid")
+	post := postModel{}
+
+	json.NewDecoder(r.Body).Decode(&post)
+
+	post.id = primitive.NewObjectID()
+
+	client.Database("Users").Collection(uid).InsertOne(ctx, bson.M{})
 }
 
 func getPost(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	id := ps.ByName("id")
+	uid := ps.ByName("uid")
+	pid := ps.ByName("pid")
+
+	if !primitive.IsValidObjectID(uid) || !primitive.IsValidObjectID(pid) {
+		w.WriteHeader(http.StatusNotFound)
+	}
+
+	filterCursor, err := client.Database("Users").Collection(uid).Find(ctx, bson.M{"_id": pid})
+	if err != nil {
+		log.Fatal(err)
+	}
+	var post bson.M
+	if err = filterCursor.All(ctx, &post); err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(post)
 }
 
 func getAllPost(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	id := ps.ByName("id")
+
+	if !primitive.IsValidObjectID(id) {
+		w.WriteHeader(http.StatusNotFound)
+	}
+
+	cursor, err := client.Database("Users").Collection(id).Find(ctx, bson.M{})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer cursor.Close(ctx)
+	for cursor.Next(ctx) {
+		var post bson.M
+		if err = cursor.Decode(&post); err != nil {
+			log.Fatal(err)
+		}
+		pj, _ := json.Marshal(post)
+		fmt.Fprint(w, "%s\n", pj)
+		time.Sleep(2 * time.Second)
+	}
 }
 
 func main() {
 	router := httprouter.New()
-	router.POST("/adduser/:id", addUser)
+	router.POST("/user/:id", addUser)
 	router.GET("/user/:id", getUser)
-	router.POST("/addpost/:id", addPost)
+	router.POST("/post/:id", addPost)
 	router.GET("/post/:uid", getPost)
-	router.GET("/post/:uid", getAllPost)
+	router.GET("/user/post/:uid", getAllPost)
 
 	log.Fatal(http.ListenAndServe(":8080", router))
 
